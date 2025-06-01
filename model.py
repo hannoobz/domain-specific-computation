@@ -1,126 +1,128 @@
-import mesa
-try:
-    from agents import MtbAgent, BackgroundPatchAgent
-except ImportError:
-    print("CRITICAL: MtbAgent or BackgroundPatchAgent not found. Ensure agents.py is correct.")
-    MtbAgent = None
-    BackgroundPatchAgent = None
+from mesa import Model
+from mesa.space import MultiGrid
+from agents import MtbBacterium 
+import math
 
-import numpy as np
+class MtbResistanceModel(Model):
+    def __init__(self, 
+                day_start,     
+                drug_type,   
+                day_interval=1,
+                width=50,
+                height=50, 
+                initial_mtb=500,
+                initial_persister_fraction=0.01,
+                prob_susceptible_to_persister=0.001,
+                prob_persister_to_susceptible_no_drug=0.01,
+                prob_persister_to_susceptible_drug_on=0.0001,
+                seed=None,
+                ):
+        super().__init__(seed=seed)
 
-class MtbEnvironmentModel(mesa.Model):
-    def __init__(self,
-                 width="30", height="30",
-                 initial_mtb_population="50",
-                 drug_name="Rifampicin",
-                 drug_start_step="50",
-                 drug_duration_steps="200",
-                 drug_applied_concentration="10.0",
-                 rif_mic="1.0",
-                 rpoB_mutation_rate="1e-7",
-                 basal_replication_rate_mtb="0.1",
-                 basal_death_rate_mtb="0.01",
-                 fitness_cost_rif_resistant="0.1",
-                 max_iters="500",
-                 seed="None"):
+        self.grid = MultiGrid(width, height, torus=False)
+        self.steps = 0 
 
-        try:
-            self.p_width = int(width)
-            self.p_height = int(height)
-            self.p_initial_mtb_population = int(initial_mtb_population)
-            self.p_drug_start_step = int(drug_start_step)
-            self.p_drug_duration_steps = int(drug_duration_steps)
-            self.p_drug_applied_concentration = float(drug_applied_concentration)
-            self.p_rif_mic = float(rif_mic)
-            self.p_rpoB_mutation_rate = 10**float(rpoB_mutation_rate)
-            self.p_basal_replication_rate_mtb = float(basal_replication_rate_mtb)
-            self.p_basal_death_rate_mtb = float(basal_death_rate_mtb)
-            self.p_fitness_cost_rif_resistant = float(fitness_cost_rif_resistant)
-            self.max_iters = int(max_iters)
-            parsed_seed = None
-            if isinstance(seed, str):
-                if seed.lower() == "none": parsed_seed = None
-                elif seed.isdigit(): parsed_seed = int(seed)
-            elif isinstance(seed, (int, float)): parsed_seed = int(seed)
-            super().__init__(seed=parsed_seed)
-        except ValueError as e:
-            print(f"FATAL: Error converting UI parameters: {e}")
-            raise
+        self.initial_persister_fraction = initial_persister_fraction
+        self.prob_susceptible_to_persister = prob_susceptible_to_persister
+        self.prob_persister_to_susceptible_no_drug = prob_persister_to_susceptible_no_drug
+        self.prob_persister_to_susceptible_drug_on = prob_persister_to_susceptible_drug_on
 
-        self.drug_name = drug_name
-        self.drug_present_in_environment = False
-        self.current_drug_concentration = 0.0
-        self.grid = mesa.space.MultiGrid(self.p_width, self.p_height, torus=True)
 
-        if MtbAgent is None or BackgroundPatchAgent is None:
-            raise ImportError("MtbAgent or BackgroundPatchAgent not properly imported.")
+        # RIFAMPICIN (RIF)
+        self.rif_k_max_kill_daily = 0.055 * 24 
+        self.rif_ec50_ng_ml = 18.4             
+        self.rif_hill_coefficient = 1.0        
+        self.rif_active_concentration_ng_ml = 50.0
 
-        for x in range(self.grid.width):
-            for y in range(self.grid.height):
-                patch = BackgroundPatchAgent(model=self)
-                self.grid.place_agent(patch, (x,y))
+        # ISONIAZID (INH)
+        self.inh_k_max_kill_daily = 0.041 * 24 
+        self.inh_ec50_ng_ml = 32.1             
+        self.inh_hill_coefficient = 1.0        
+        self.inh_active_concentration_ng_ml = 50.0
 
-        for _ in range(self.p_initial_mtb_population):
-            agent = MtbAgent(
-                model=self,
-                initial_genotype={'rpoB_allele': 'wildtype'},
-                mutation_rate_rpoB=self.p_rpoB_mutation_rate,
-                basal_replication_rate=self.p_basal_replication_rate_mtb,
-                basal_death_rate=self.p_basal_death_rate_mtb,
-                fitness_cost_resistant=self.p_fitness_cost_rif_resistant
-            )
+        # PYRAZINAMIDE (PZA)
+        self.pza_k_max_kill_daily = 0.043 * 24 
+        self.pza_ec50_ng_ml = 45.5 * 1000000 
+        self.pza_hill_coefficient = 1.0        
+        self.pza_active_concentration_ng_ml = 60000.0
+
+        # ETHAMBUTOL (EMB)
+        self.emb_k_max_kill_daily = 0.053 * 24 
+        self.emb_ec50_ng_ml = 79.5             
+        self.emb_hill_coefficient = 1.0        
+        self.emb_active_concentration_ng_ml = 100.0
+
+        kg_max_intracellular_hourly = 0.033 
+        kg_max_intracellular_daily_rate = kg_max_intracellular_hourly * 24
+        self.replication_prob_per_day = 1 - math.exp(-kg_max_intracellular_daily_rate) 
+        
+        self.rif_mutation_rate = 3.3e-6 
+        self.inh_mutation_rate = 3.2e-7
+        self.pza_mutation_rate = 1e-5
+        self.emb_mutation_rate = 6.4e-7 
+        
+        self.rif_drug_on = False
+        self.inh_drug_on = False
+        self.pza_drug_on = False
+        self.emb_drug_on = False
+
+        self.day_start_treatment = day_start
+        self.day_treatment_interval = day_interval
+        self.active_drugs_config = self._parse_drug_type(drug_type)
+        
+        for _ in range(initial_mtb):
+            is_initial_persister = self.random.random() < self.initial_persister_fraction
+            mtb_agent = MtbBacterium(model=self, initial_is_persister=is_initial_persister)
             x = self.random.randrange(self.grid.width)
             y = self.random.randrange(self.grid.height)
-            self.grid.place_agent(agent, (x, y))
+            self.grid.place_agent(mtb_agent, (x, y))
+            mtb_agent.pos = (x,y)
+            self.agents.add(mtb_agent)
 
-        self.datacollector = mesa.DataCollector(
-            model_reporters={
-                "Steps": lambda m: m.steps,
-                "TotalMtb": lambda m: len([a for a in m.agents if isinstance(a, MtbAgent)]),
-                "SusceptibleMtb_RIF": lambda m: sum(1 for a in m.agents if isinstance(a, MtbAgent) and not a.is_resistant_rif),
-                "ResistantMtb_RIF": lambda m: sum(1 for a in m.agents if isinstance(a, MtbAgent) and a.is_resistant_rif),
-                "RifampicinConcentration": lambda m: m.current_drug_concentration
-            }
-        )
-        self.running = True
-        self.datacollector.collect(self)
 
-    def get_drug_concentration(self, drug_name_query, pos=None):
-        if drug_name_query == self.drug_name:
-            return self.current_drug_concentration
-        return 0.0
+    def _parse_drug_type(self, drug_type_input):
+        active_drugs_map = {"RIF": False, "INH": False, "PZA": False, "EMB": False}
+        
+        if isinstance(drug_type_input, str):
+            drug_upper = drug_type_input.upper()
+            if drug_upper in active_drugs_map:
+                active_drugs_map[drug_upper] = True
+        elif isinstance(drug_type_input, list):
+            for drug_str in drug_type_input:
+                drug_upper = drug_str.upper()
+                if drug_upper in active_drugs_map:
+                    active_drugs_map[drug_upper] = True
+        return active_drugs_map
 
-    def get_drug_mic(self, drug_name_query):
-        if drug_name_query == self.drug_name:
-            return self.p_rif_mic
-        return float('inf')
-
-    def place_offspring(self, offspring_agent, parent_pos):
-        if self.grid.is_cell_empty(parent_pos):
-             self.grid.place_agent(offspring_agent, parent_pos)
-        else:
-            possible_moves = self.grid.get_neighborhood(parent_pos, moore=True, include_center=False, radius=1)
-            empty_neighbors = [p for p in possible_moves if self.grid.is_cell_empty(p)]
-            target_pos = self.random.choice(empty_neighbors) if empty_neighbors else parent_pos
-            self.grid.place_agent(offspring_agent, target_pos)
-
-    def remove_agent(self, agent_to_remove):
-        if isinstance(agent_to_remove, MtbAgent):
-            agent_to_remove.remove()
 
     def step(self):
-        if self.steps == self.p_drug_start_step:
-            self.drug_present_in_environment = True
-            self.current_drug_concentration = self.p_drug_applied_concentration
-        elif self.steps == (self.p_drug_start_step + self.p_drug_duration_steps):
-            self.drug_present_in_environment = False
-            self.current_drug_concentration = 0.0
+        is_treatment_day = False
+        if self.steps >= self.day_start_treatment:
+            if (self.steps - self.day_start_treatment) % self.day_treatment_interval == 0:
+                is_treatment_day = True
+        
+        administered_today_list = []
+        if is_treatment_day:
+            self.rif_drug_on = self.active_drugs_config.get("RIF", False)
+            if self.rif_drug_on: administered_today_list.append("RIF")
+            
+            self.inh_drug_on = self.active_drugs_config.get("INH", False)
+            if self.inh_drug_on: administered_today_list.append("INH")
 
-        mtb_agents_to_step = [agent for agent in self.agents if isinstance(agent, MtbAgent)]
-        for agent in self.random.sample(mtb_agents_to_step, len(mtb_agents_to_step)):
-            agent.step()
+            self.pza_drug_on = self.active_drugs_config.get("PZA", False)
+            if self.pza_drug_on: administered_today_list.append("PZA")
 
-        self.datacollector.collect(self)
+            self.emb_drug_on = self.active_drugs_config.get("EMB", False)
+            if self.emb_drug_on: administered_today_list.append("EMB")
+            
+            if administered_today_list:
+                 print(f"--- Day {self.steps}: Administering: {', '.join(administered_today_list)} ---")
 
-        if self.steps >= self.max_iters or len([a for a in self.agents if isinstance(a, MtbAgent)]) == 0:
-            self.running = False
+        else:
+            self.rif_drug_on = False
+            self.inh_drug_on = False
+            self.pza_drug_on = False
+            self.emb_drug_on = False
+
+        self.agents.shuffle_do("step")
+        

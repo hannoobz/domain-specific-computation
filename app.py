@@ -1,86 +1,65 @@
-import mesa
-from mesa.visualization import (
-    Slider,
-    SolaraViz,
-    make_plot_component,
-    make_space_component,
+from model import MtbResistanceModel
+from agents import MtbBacterium 
+
+model = MtbResistanceModel(
+    day_start=21,
+    day_interval=10,
+    # drug_type=["PZA"],
+    drug_type=["RIF", "INH", "PZA", "EMB"],
+    initial_mtb=200,
+    width=50,
+    height=50
 )
 
-from agents import MtbAgent, BackgroundPatchAgent
-from model import MtbEnvironmentModel
-SUSCEPTIBLE_COLOR = "#00DD00"
-RESISTANT_COLOR = "#FF0000"
-BACKGROUND_COLOR = "#F0F0F0" 
+print(f"Starting simulation. Treatment from day {model.day_start_treatment}, interval {model.day_treatment_interval} day(s).")
+print(f"Active drugs initially configured: {model.active_drugs_config}")
+print(f"Initial Mtb count: {len(model.agents)}")
+print("-" * 30)
 
-def mtb_agent_portrayal(agent):
-    if agent is None or not hasattr(agent, 'pos') or agent.pos is None:
-        return None
+for i in range(180): 
+    model.step()
+    resistant_counts = {
+        "RIF": 0,
+        "INH": 0,
+        "PZA": 0,
+        "EMB": 0
+    }
+    
+    if model.agents:
+        for agent in model.agents:
+            if isinstance(agent, MtbBacterium):
+                if agent.resistance_profile.get("RIF", False):
+                    resistant_counts["RIF"] += 1
+                if agent.resistance_profile.get("INH", False):
+                    resistant_counts["INH"] += 1
+                if agent.resistance_profile.get("PZA", False):
+                    resistant_counts["PZA"] += 1
+                if agent.resistance_profile.get("EMB", False):
+                    resistant_counts["EMB"] += 1
+            
+    total_mtb_count = len(model.agents)
+    print(f"Day {model.steps}: "
+          f"Total Mtb = {total_mtb_count}, "
+          f"Res-RIF = {resistant_counts['RIF']}, "
+          f"Res-INH = {resistant_counts['INH']}, "
+          f"Res-PZA = {resistant_counts['PZA']}, "
+          f"Res-EMB = {resistant_counts['EMB']}")
 
-    if isinstance(agent, MtbAgent):
-        portrayal = {"size": 25, "marker": "o", "zorder": 2}
-        if agent.is_resistant_rif:
-            portrayal["color"] = RESISTANT_COLOR
-        else:
-            portrayal["color"] = SUSCEPTIBLE_COLOR
-        return portrayal
-    elif isinstance(agent, BackgroundPatchAgent):
-        return {"size": 75, "marker": "s", "color": BACKGROUND_COLOR, "zorder": 1}
-    return None
+print("-" * 30)
+print(f"\nSimulation complete after {model.steps} steps.")
 
-def post_process_grid(ax):
-    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
-    ax.get_figure().set_size_inches(7, 7)
+final_resistant_counts = {"RIF": 0, "INH": 0, "PZA": 0, "EMB": 0}
+if model.agents:
+    for agent in model.agents:
+        if isinstance(agent, MtbBacterium):
+            if agent.resistance_profile.get("RIF", False): final_resistant_counts["RIF"] += 1
+            if agent.resistance_profile.get("INH", False): final_resistant_counts["INH"] += 1
+            if agent.resistance_profile.get("PZA", False): final_resistant_counts["PZA"] += 1
+            if agent.resistance_profile.get("EMB", False): final_resistant_counts["EMB"] += 1
 
-mtb_model_params = {
-    "seed": {"type": "InputText", "value": "None", "label": "Random Seed (int or None)"},
-    "width": {"type": "InputText", "value": "30", "label": "Grid Width"},
-    "height": {"type": "InputText", "value": "30", "label": "Grid Height"},
-    "initial_mtb_population": Slider("Initial Mtb Population", 50, 0, 200, 10),
-    "drug_start_step": Slider("Drug Start Step", 20, 0, 100, 5),
-    "drug_duration_steps": Slider("Drug Duration (steps)", 100, 10, 200, 10),
-    "drug_applied_concentration": Slider("RIF Applied Conc.", 5.0, 0.0, 20.0, 0.5),
-    "rif_mic": Slider("RIF MIC (Susceptible)", 1.0, 0.1, 5.0, 0.1),
-    "rpoB_mutation_rate": Slider("RIF Mutation Rate (log10)", -6, -9, -5, 0.1),
-    "basal_replication_rate_mtb": Slider("Mtb Rep. Rate", 0.1, 0.01, 0.3, 0.01),
-    "basal_death_rate_mtb": Slider("Mtb Death Rate", 0.01, 0.001, 0.05, 0.001),
-    "fitness_cost_rif_resistant": Slider("Fitness Cost (RIF Resist.)", 0.1, 0.0, 0.3, 0.01),
-    "max_iters": {"type": "InputText", "value": "200", "label": "Max Iterations (Steps)"},
-}
-
-space_component = make_space_component(
-    mtb_agent_portrayal,
-    draw_grid=True,
-    post_process=post_process_grid
-)
-
-plot_styling_dict = {
-    "TotalMtb": "black",
-    "SusceptibleMtb_RIF": SUSCEPTIBLE_COLOR,
-    "ResistantMtb_RIF": RESISTANT_COLOR,
-    "RifampicinConcentration": "blue"
-}
-chart_component = make_plot_component(plot_styling_dict)
-
-initial_model_instance_params = {
-    "width": "30", "height": "30", "initial_mtb_population": "50",
-    "drug_start_step": "20", "drug_duration_steps": "100",
-    "drug_applied_concentration": "5.0", "rif_mic": "1.0",
-    "rpoB_mutation_rate": "-6", 
-    "basal_replication_rate_mtb": "0.1", "basal_death_rate_mtb": "0.01",
-    "fitness_cost_rif_resistant": "0.1", "max_iters": "200", "seed": "None",
-    "drug_name": "Rifampicin"
-}
-mtb_sim_model_instance = MtbEnvironmentModel(**initial_model_instance_params)
-
-page_components = [chart_component]
-if hasattr(mtb_sim_model_instance, 'grid') and mtb_sim_model_instance.grid is not None:
-    page_components.insert(0, space_component)
-
-page = SolaraViz(
-    mtb_sim_model_instance,
-    components=page_components,
-    model_params=mtb_model_params,
-    name="Simplified Mtb Evolution (with Background)",
-)
-
-page
+final_total_count = len(model.agents)
+print(f"Final state: Total Mtb = {final_total_count}, "
+      f"Res-RIF = {final_resistant_counts['RIF']}, "
+      f"Res-INH = {final_resistant_counts['INH']}, "
+      f"Res-PZA = {final_resistant_counts['PZA']}, "
+      f"Res-EMB = {final_resistant_counts['EMB']}")
