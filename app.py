@@ -1,65 +1,111 @@
 from model import MtbResistanceModel
-from agents import MtbBacterium 
+from agents import MtbBacterium
+from collections import defaultdict
+
+start = 1
+interval = 1
+drug_type = ["RIF", "PZA","INH","EMB"]
+days= 100
+
+def get_resistance_pattern(agent):
+    resistant_drugs = []
+    drugs = ["RIF", "INH", "PZA", "EMB"]
+    
+    for drug in drugs:
+        if agent.resistance_profile.get(drug, False):
+            resistant_drugs.append(drug)
+    
+    return tuple(resistant_drugs) if resistant_drugs else ("Susceptible",)
+
+def get_agent_classification(agent):
+    resistance_pattern = get_resistance_pattern(agent)
+    is_persister = getattr(agent, 'is_persister', False)
+    
+    if resistance_pattern == ("Susceptible",):
+        base_type = "Susceptible"
+    else:
+        base_type = " + ".join(resistance_pattern)
+    
+    if is_persister:
+        return f"{base_type} (Persister)"
+    else:
+        return base_type
+
+def count_all_patterns(agents):
+    resistance_counts = defaultdict(int)
+    full_counts = defaultdict(int)
+    persister_counts = {"Persisters": 0, "Non-Persisters": 0}
+    
+    for agent in agents:
+        if isinstance(agent, MtbBacterium):
+            resistance_pattern = get_resistance_pattern(agent)
+            resistance_counts[resistance_pattern] += 1
+            
+            full_classification = get_agent_classification(agent)
+            full_counts[full_classification] += 1
+            
+            if agent.is_persister:
+                persister_counts["Persisters"] += 1
+            else:
+                persister_counts["Non-Persisters"] += 1
+    
+    return resistance_counts, full_counts, persister_counts
+
+def print_detailed_summary(resistance_counts, full_counts, persister_counts, total_count, day):
+    print(f"Day {day}: Total Mtb = {total_count}")
+    if not resistance_counts:
+        print("  No agents remaining")
+        return
+    print(f"  Persisters: {persister_counts['Persisters']}, Non-Persisters: {persister_counts['Non-Persisters']}")
+    print()
+    print("  Resistance Patterns:")
+    sorted_resistance = sorted(resistance_counts.items(), 
+                             key=lambda x: (0 if x[0] == ("Susceptible",) else len(x[0]), x[0]))
+    
+    for pattern, count in sorted_resistance:
+        if pattern == ("Susceptible",):
+            print(f"    Susceptible: {count}")
+        else:
+            pattern_str = " + ".join(pattern)
+            print(f"    {pattern_str}: {count}")
+    
+    print()
+    
+    print("  Detailed Breakdown:")
+    sorted_full = sorted(full_counts.items(), 
+                        key=lambda x: (0 if x[0].startswith("Susceptible") else 
+                                     len([d for d in ["RIF", "INH", "PZA", "EMB"] if d in x[0]]), x[0]))
+    
+    for classification, count in sorted_full:
+        print(f"    {classification}: {count}")
 
 model = MtbResistanceModel(
-    day_start=21,
-    day_interval=10,
-    # drug_type=["PZA"],
-    drug_type=["RIF", "INH", "PZA", "EMB"],
+    day_start= start,
+    day_interval=interval,
+    drug_type= drug_type,
     initial_mtb=200,
-    width=50,
-    height=50
 )
 
 print(f"Starting simulation. Treatment from day {model.day_start_treatment}, interval {model.day_treatment_interval} day(s).")
 print(f"Active drugs initially configured: {model.active_drugs_config}")
 print(f"Initial Mtb count: {len(model.agents)}")
-print("-" * 30)
+print("=" * 60)
 
-for i in range(180): 
+for i in range(days):
     model.step()
-    resistant_counts = {
-        "RIF": 0,
-        "INH": 0,
-        "PZA": 0,
-        "EMB": 0
-    }
     
-    if model.agents:
-        for agent in model.agents:
-            if isinstance(agent, MtbBacterium):
-                if agent.resistance_profile.get("RIF", False):
-                    resistant_counts["RIF"] += 1
-                if agent.resistance_profile.get("INH", False):
-                    resistant_counts["INH"] += 1
-                if agent.resistance_profile.get("PZA", False):
-                    resistant_counts["PZA"] += 1
-                if agent.resistance_profile.get("EMB", False):
-                    resistant_counts["EMB"] += 1
-            
+    resistance_counts, full_counts, persister_counts = count_all_patterns(model.agents)
     total_mtb_count = len(model.agents)
-    print(f"Day {model.steps}: "
-          f"Total Mtb = {total_mtb_count}, "
-          f"Res-RIF = {resistant_counts['RIF']}, "
-          f"Res-INH = {resistant_counts['INH']}, "
-          f"Res-PZA = {resistant_counts['PZA']}, "
-          f"Res-EMB = {resistant_counts['EMB']}")
+    
+    print_detailed_summary(resistance_counts, full_counts, persister_counts, total_mtb_count, i+1)
+    print("-" * 60)
 
-print("-" * 30)
-print(f"\nSimulation complete after {model.steps} steps.")
+print(f"\nSimulation complete after {days} days.")
 
-final_resistant_counts = {"RIF": 0, "INH": 0, "PZA": 0, "EMB": 0}
-if model.agents:
-    for agent in model.agents:
-        if isinstance(agent, MtbBacterium):
-            if agent.resistance_profile.get("RIF", False): final_resistant_counts["RIF"] += 1
-            if agent.resistance_profile.get("INH", False): final_resistant_counts["INH"] += 1
-            if agent.resistance_profile.get("PZA", False): final_resistant_counts["PZA"] += 1
-            if agent.resistance_profile.get("EMB", False): final_resistant_counts["EMB"] += 1
-
+final_resistance_counts, final_full_counts, final_persister_counts = count_all_patterns(model.agents)
 final_total_count = len(model.agents)
-print(f"Final state: Total Mtb = {final_total_count}, "
-      f"Res-RIF = {final_resistant_counts['RIF']}, "
-      f"Res-INH = {final_resistant_counts['INH']}, "
-      f"Res-PZA = {final_resistant_counts['PZA']}, "
-      f"Res-EMB = {final_resistant_counts['EMB']}")
+
+print("=" * 60)
+print("FINAL COMPREHENSIVE SUMMARY")
+print("=" * 60)
+print_detailed_summary(final_resistance_counts, final_full_counts, final_persister_counts, final_total_count, days)
