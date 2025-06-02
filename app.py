@@ -1,11 +1,29 @@
 from model import MtbResistanceModel
 from agents import MtbBacterium
 from collections import defaultdict
+import argparse
 
-start = 1
-interval = 1
-drug_type = ["RIF", "PZA","INH","EMB"]
-days= 100
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Mtb Simulation')
+    
+    parser.add_argument('--start', type=int,
+                        help='Start value')
+    
+    parser.add_argument('--interval', type=int, default=1,
+                        help='Interval value (default: 1)')
+    
+    parser.add_argument('--drug-type', nargs='+', default=["RIF", "PZA","INH","EMB"],
+                        help='Drug types (default: RIF PZA INH EMB)')
+    
+    parser.add_argument('--days', type=int,
+                        help='Number of days')
+    return parser.parse_args()
+
+args = parse_arguments()
+start = args.start
+interval = args.interval
+drug_type = args.drug_type
+days = args.days
 
 def get_resistance_pattern(agent):
     resistant_drugs = []
