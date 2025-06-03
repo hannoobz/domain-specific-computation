@@ -47,13 +47,13 @@ class MtbBacterium(Agent):
 
         if not self.is_persister:
             is_any_drug_active_in_model = model.rif_drug_on or model.inh_drug_on or model.pza_drug_on or model.emb_drug_on
-            if is_any_drug_active_in_model and self.random.random() < model.prob_susceptible_to_persister:
+            if is_any_drug_active_in_model and self.model.random.random() < model.prob_susceptible_to_persister:
                 self.is_persister = True
                 self.replicating = False
         else:
             is_any_drug_active_in_model = model.rif_drug_on or model.inh_drug_on or model.pza_drug_on or model.emb_drug_on
-            if (not is_any_drug_active_in_model and self.random.random() < model.prob_persister_to_susceptible_no_drug) or \
-               (is_any_drug_active_in_model and self.random.random() < model.prob_persister_to_susceptible_drug_on):
+            if (not is_any_drug_active_in_model and self.model.random.random() < model.prob_persister_to_susceptible_no_drug) or \
+               (is_any_drug_active_in_model and self.model.random.random() < model.prob_persister_to_susceptible_drug_on):
                 self.is_persister = False
                 self.replicating = True
 
@@ -80,20 +80,20 @@ class MtbBacterium(Agent):
 
         final_kill_probability_today = max(0.0, min(final_kill_probability_today, 1.0))
 
-        if self.random.random() < final_kill_probability_today:
+        if self.model.random.random() < final_kill_probability_today:
             self.remove()
             return
 
-        if self.replicating and not self.is_persister and self.random.random() < model.replication_prob_per_day:
+        if self.replicating and not self.is_persister and self.model.random.random() < model.replication_prob_per_day:
             child_resistance_profile = self.resistance_profile.copy()
 
-            if not self.resistance_profile["RIF"] and self.random.random() < model.rif_mutation_rate:
+            if not self.resistance_profile["RIF"] and self.model.random.random() < model.rif_mutation_rate:
                 child_resistance_profile["RIF"] = True
-            if not self.resistance_profile["INH"] and self.random.random() < model.inh_mutation_rate:
+            if not self.resistance_profile["INH"] and self.model.random.random() < model.inh_mutation_rate:
                 child_resistance_profile["INH"] = True
-            if not self.resistance_profile["PZA"] and self.random.random() < model.pza_mutation_rate:
+            if not self.resistance_profile["PZA"] and self.model.random.random() < model.pza_mutation_rate:
                 child_resistance_profile["PZA"] = True
-            if not self.resistance_profile["EMB"] and self.random.random() < model.emb_mutation_rate:
+            if not self.resistance_profile["EMB"] and self.model.random.random() < model.emb_mutation_rate:
                 child_resistance_profile["EMB"] = True
 
             child = MtbBacterium(model=model, resistance_profile=child_resistance_profile, initial_is_persister=False)
@@ -107,7 +107,7 @@ class MtbBacterium(Agent):
                 empty_neighbors = [cell for cell in neighborhood if self.model.grid.is_cell_empty(cell)]
 
                 if empty_neighbors:
-                    new_pos = self.random.choice(empty_neighbors)
+                    new_pos = self.model.random.choice(empty_neighbors)
                     self.model.grid.place_agent(child, new_pos)
                     child.pos = new_pos
                     self.model.agents.add(child)

@@ -24,6 +24,7 @@ class MtbResistanceModel(Model):
 
         self.simulator = simulator
         self.simulator.setup(self)
+        self.seed = seed
 
         self.grid = SingleGrid(int(width), int(height), torus=False)
         self.steps = 0
