@@ -1,25 +1,31 @@
 from mesa import Model
 from mesa.space import SingleGrid
 from agents import MtbBacterium
+from mesa.datacollection import DataCollector
+from mesa.experimental.devs import ABMSimulator
 import math
 
 class MtbResistanceModel(Model):
     def __init__(self,
-                day_start,
-                drug_type,
+                drug_type="RIF INH PZA EMB",
+                day_start=21,
                 day_interval=1,
-                width=500,
-                height=500,
-                initial_mtb=500,
+                width=250,
+                height=250,
+                initial_mtb=200,
                 initial_persister_fraction=0.01,
                 prob_susceptible_to_persister=0.001,
                 prob_persister_to_susceptible_no_drug=0.01,
                 prob_persister_to_susceptible_drug_on=0.0001,
                 seed=None,
+                simulator: ABMSimulator = None,
                 ):
         super().__init__(seed=seed)
 
-        self.grid = SingleGrid(width, height, torus=False)
+        self.simulator = simulator
+        self.simulator.setup(self)
+
+        self.grid = SingleGrid(int(width), int(height), torus=False)
         self.steps = 0
 
         self.initial_persister_fraction = initial_persister_fraction
@@ -65,10 +71,10 @@ class MtbResistanceModel(Model):
         self.pza_drug_on = False
         self.emb_drug_on = False
 
-        self.day_start_treatment = day_start
-        self.day_treatment_interval = day_interval
+        self.day_start_treatment = int(day_start)
+        self.day_treatment_interval = int(day_interval)
         self.active_drugs_config = self._parse_drug_type(drug_type)
-
+        initial_mtb = int(initial_mtb)
         if initial_mtb > self.grid.width * self.grid.height:
             print(f"Warning: initial_mtb ({initial_mtb}) exceeds SingleGrid capacity ({self.grid.width * self.grid.height}). "
                 f"Setting initial_mtb to {self.grid.width * self.grid.height}.")
@@ -86,8 +92,28 @@ class MtbResistanceModel(Model):
             self.grid.place_agent(mtb_agent, empty_cell)
             self.agents.add(mtb_agent)
 
+        model_reporters = {
+            "Total Mtb": lambda m: len(m.agents),
+            "Susceptible": lambda m: len(m.agents.select(
+                lambda a: a.is_persister==False
+                            and a.resistance_profile["RIF"]==False
+                            and a.resistance_profile["INH"]==False
+                            and a.resistance_profile["PZA"]==False
+                            and a.resistance_profile["EMB"]==False
+                            )),
+            "Persister": lambda m: len(m.agents.select(lambda a: a.is_persister)),
+            "Res-RIF": lambda m: len(m.agents.select(lambda a: a.resistance_profile["RIF"])),
+            "Res-INH": lambda m: len(m.agents.select(lambda a: a.resistance_profile["INH"])),
+            "Res-PZA": lambda m: len(m.agents.select(lambda a: a.resistance_profile["PZA"])),
+            "Res-EMB": lambda m: len(m.agents.select(lambda a: a.resistance_profile["EMB"])),
+        }
+        self.datacollector = DataCollector(model_reporters)
+        self.running = True
+        self.datacollector.collect(self)
+
 
     def _parse_drug_type(self, drug_type_input):
+        drug_type_input = list(drug_type_input.split(" "))
         active_drugs_map = {"RIF": False, "INH": False, "PZA": False, "EMB": False}
 
         if isinstance(drug_type_input, str):
@@ -122,9 +148,6 @@ class MtbResistanceModel(Model):
             self.emb_drug_on = self.active_drugs_config.get("EMB", False)
             if self.emb_drug_on: administered_today_list.append("EMB")
 
-            if administered_today_list:
-                 print(f"--- Day {self.steps}: Administering: {', '.join(administered_today_list)} ---")
-
         else:
             self.rif_drug_on = False
             self.inh_drug_on = False
@@ -132,3 +155,4 @@ class MtbResistanceModel(Model):
             self.emb_drug_on = False
 
         self.agents.shuffle_do("step")
+        self.datacollector.collect(self)
