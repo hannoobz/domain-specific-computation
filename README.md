@@ -15,6 +15,10 @@ This agent-based model investigates the complex interplay between drug pharmacod
 - Stochastic mutation with drug-specific resistance rates
 - Interactive visualization with Solara GUI
 
+### UI Preview
+![ScreencastFrom2025-06-0403-41-41-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/e7ba9366-6710-4aff-a9a4-51a6587fede6)
+
+
 ## Installation
 
 ### Prerequisites
