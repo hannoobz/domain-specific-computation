@@ -21,6 +21,14 @@ def parse_arguments():
     
     parser.add_argument('--seed', type=int,default=0,
                         help='Seed')
+    
+    parser.add_argument('--initial', type=int, default=200, help='Initial Population')
+
+    parser.add_argument('--width', type=int, default=250,
+                        help='Width')
+    
+    parser.add_argument('--height', type=int, default=250,
+                        help='Height')
 
     return parser.parse_args()
 
@@ -30,6 +38,9 @@ interval = args.interval
 drug_type = args.drug_type
 days = args.days
 seed = args.seed
+initial = args.initial
+width = args.width
+height = args.height
 
 def get_resistance_pattern(agent):
     resistant_drugs = []
@@ -108,7 +119,9 @@ model = MtbResistanceModel(
     day_start= start,
     day_interval=interval,
     drug_type= drug_type,
-    initial_mtb=200,
+    initial_mtb=initial,
+    width=width,
+    height=height,
     simulator=ABMSimulator(),
 )
 
