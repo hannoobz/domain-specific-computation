@@ -18,6 +18,10 @@ def parse_arguments():
     
     parser.add_argument('--days', type=int,
                         help='Number of days')
+    
+    parser.add_argument('--seed', type=int,default=0,
+                        help='Seed')
+
     return parser.parse_args()
 
 args = parse_arguments()
@@ -25,6 +29,7 @@ start = args.start
 interval = args.interval
 drug_type = args.drug_type
 days = args.days
+seed = args.seed
 
 def get_resistance_pattern(agent):
     resistant_drugs = []
@@ -99,6 +104,7 @@ def print_detailed_summary(resistance_counts, full_counts, persister_counts, tot
         print(f"    {classification}: {count}")
 
 model = MtbResistanceModel(
+    seed=int(seed),
     day_start= start,
     day_interval=interval,
     drug_type= drug_type,
