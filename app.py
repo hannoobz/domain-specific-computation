@@ -1,4 +1,5 @@
 from model import MtbResistanceModel
+from mesa.experimental.devs import ABMSimulator
 from agents import MtbBacterium
 from collections import defaultdict
 import argparse
@@ -12,7 +13,7 @@ def parse_arguments():
     parser.add_argument('--interval', type=int, default=1,
                         help='Interval value (default: 1)')
     
-    parser.add_argument('--drug-type', nargs='+', default=["RIF", "PZA","INH","EMB"],
+    parser.add_argument('--drug-type',type=str, default="RIF PZA INH EMB",
                         help='Drug types (default: RIF PZA INH EMB)')
     
     parser.add_argument('--days', type=int,
@@ -102,6 +103,7 @@ model = MtbResistanceModel(
     day_interval=interval,
     drug_type= drug_type,
     initial_mtb=200,
+    simulator=ABMSimulator(),
 )
 
 print(f"Starting simulation. Treatment from day {model.day_start_treatment}, interval {model.day_treatment_interval} day(s).")
